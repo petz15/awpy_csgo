@@ -489,7 +489,7 @@ class DemoParser:
         parser_cmd = [
             "go",
             "run",
-            "parse_demo_v2.go",
+            "parse_demo_v3.go",
             "-demo",
             self.demofile,
             "-parserate",

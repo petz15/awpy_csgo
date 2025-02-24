@@ -22,7 +22,8 @@ demo_parser = DemoParser(
     buy_style="hltv")
 
     
-data = demo_parser.parse()
+#data = demo_parser.parse()
+data = demo_parser.parse_demo()
 
 end_time = time.time()
 elapsed_time = end_time - start_time
