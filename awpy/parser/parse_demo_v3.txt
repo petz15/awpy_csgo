@@ -263,17 +263,17 @@ func playerInList(p *common.Player, players []PlayerInfo) bool {
 }
 
 
-func parseEconomyduringFT(p *common.Player, currentGame *Game) {
+func parseEconomyduringFT(p *common.Player, currentRound *GameRound) {
 
 	foundPlayer := false
-	if *currentGame.PlayerEconomy != nil {
-		for _, i := range *currentGame.PlayerEconomy {
+	if currentRound.PlayerEconomy != nil {
+		for _, i := range currentRound.PlayerEconomy {
 			if int64(p.SteamID64) == i.SteamID {
 				
 				foundPlayer = true
 
-				if i.MoneyStart == nil {
-					i.MoneyStart = int64(p.Money())
+				if *i.MoneyStart == nil {
+					*i.MoneyStart = int64(p.Money())
 				}
 
 				
@@ -286,31 +286,46 @@ func parseEconomyduringFT(p *common.Player, currentGame *Game) {
 	}
 
 	if !foundPlayer {
-		currentEconomy := PlayerEconomy{}
+		currentEconomy := PlayerEconomy{
 
-		currentEconomy.SteamID = int64(p.SteamID64)
-		currentEconomy.Name = p.Name
-		currentEconomy.Team = p.TeamState.ClanName()
-		currentEconomy.Side = p.TeamState.Side().String()
-		currentEconomy.MoneyStart = int64(p.Money())
-		currentEconomy.MoneyFreeze = int64(p.Money())
-		currentEconomy.Money = int64(p.Money())
-		currentEconomy.Moneytemp = int64(p.Money())
-		currentEconomy.MoneySpent = currentEconomy.MoneyStart - currentEconomy.Money
+		SteamID: 		int64(p.SteamID64),
+		Name:			p.Name,
+		MoneyStart: 	int64(p.Money()),
+		MoneyFreeze:	int64(p.Money()),
+		Money:			int64(p.Money()),
+		Moneytemp:		int64(p.Money()),
+		MoneySpent:		currentEconomy.MoneyStart - currentEconomy.Money}
 
-		*currentGame.PlayerEconomy = append(*currentGame.PlayerEconomy, currentEconomy)
+		if p.TeamState != nil {
+			currentEconomy.PlayerTeam = p.TeamState.ClanName()
+		}
+	
+		switch p.Team {
+		case common.TeamTerrorists:
+			currentEconomy.PlayerSide = "T"
+		case common.TeamCounterTerrorists:
+			currentEconomy.PlayerSide = "CT"
+		case common.TeamSpectators:
+			currentEconomy.PlayerSide = spectator
+		case common.TeamUnassigned:
+			currentEconomy.PlayerSide = unassigned
+		default:
+			currentEconomy.PlayerSide = unknown
+		}
+
+		*currentRound.PlayerEconomy = append(*currentRound.PlayerEconomy, currentEconomy)
 	}
 
 }
 
 
 
-func parseEconomyduringGame(p *common.Player, currentGame *Game){
+func parseEconomyduringGame(p *common.Player, currentRound *GameRound){
 
 	
 	foundPlayer := false
-	if *currentGame.PlayerEconomy != nil {
-		for _, i := range *currentGame.PlayerEconomy {
+	if *currentRound.PlayerEconomy != nil {
+		for _, i := range *currentRound.PlayerEconomy {
 			if int64(p.SteamID64) == i.SteamID {
 				
 				foundPlayer = true
@@ -347,22 +362,39 @@ func parseEconomyduringGame(p *common.Player, currentGame *Game){
 
 		currentEconomy.SteamID = int64(p.SteamID64)
 		currentEconomy.Name = p.Name
-		currentEconomy.Team = p.TeamState.ClanName()
-		currentEconomy.Side = p.TeamState.Side().String()
+		
+		if p.TeamState != nil {
+			currentEconomy.PlayerTeam = p.TeamState.ClanName()
+		}
+	
+		switch p.Team {
+		case common.TeamTerrorists:
+			currentEconomy.PlayerSide = "T"
+		case common.TeamCounterTerrorists:
+			currentEconomy.PlayerSide = "CT"
+		case common.TeamSpectators:
+			currentEconomy.PlayerSide = spectator
+		case common.TeamUnassigned:
+			currentEconomy.PlayerSide = unassigned
+		default:
+			currentEconomy.PlayerSide = unknown
+		}
+
+
 		currentEconomy.MoneyStart = int64(p.Money()) + int64(p.MoneySpentThisRound())
 		currentEconomy.MoneyFreeze = int64(p.Money())
 		currentEconomy.Money = int64(p.Money())
 		currentEconomy.Moneytemp = int64(p.Money())
 		currentEconomy.MoneySpent = int64(p.MoneySpentThisRound())
 
-		i.EqValFreeze = int64(p.EquipmentValueFreezeTimeEnd()) 
-		i.EqValStart = int64(p.EquipmentValueRoundStart()) 
+		currentEconomy.EqValFreeze = int64(p.EquipmentValueFreezeTimeEnd()) 
+		currentEconomy.EqValStart = int64(p.EquipmentValueRoundStart()) 
 
 		if p.IsAlive() {
-			i.EqVal = int64(p.EquipmentValueCurrent())
-		} else { i.EqVal = 0 }
+			currentEconomy.EqVal = int64(p.EquipmentValueCurrent())
+		} else { currentEconomy.EqVal = 0 }
 
-		*currentGame.PlayerEconomy = append(*currentGame.PlayerEconomy, currentEconomy)
+		currentRound.PlayerEconomy = append(currentRound.PlayerEconomy, currentEconomy)
 	}
 
 
@@ -399,15 +431,6 @@ func parsePlayer(gs dem.GameState, p *common.Player) PlayerInfo {
 		currentPlayer.PlayerSide = unknown
 	}
 
-	//TODO: this is where I can get the other metrics I want 
-
-	if currentPlayer.MoneyBeginning == nil {
-		currentPlayer.MoneyBeginning = int64(p.Money())
-	}
-
-	if 
-
-	currentPlayer.Moneytemp = currentPlayer.Money
 
 	// Calc other metrics
 	currentPlayer.IsAlive = p.IsAlive()
@@ -1046,32 +1069,7 @@ func registerFrameHandler(demoParser *dem.Parser, currentGame *Game, currentRoun
 
 //additional cleaning function is necessary -> see python code
 func cleanAndWriteGame(currentGame *Game, jsonIndentation bool, outpath string) {
-	// Loop through damages and see if there are any multi-damages in a single tick,
-	// and reduce them to one attacker-victim-weapon entry per tick
-	if currentGame.ParsingOpts.DamagesRolled {
-		for i := range currentGame.Rounds {
-			var tempDamages []DamageAction
-			for j := range currentGame.Rounds[i].Damages {
-				if j < len(currentGame.Rounds[i].Damages) && j > 0 {
-					if (len(tempDamages) > 0) &&
-						(currentGame.Rounds[i].Damages[j].Tick == tempDamages[len(tempDamages)-1].Tick) &&
-						(currentGame.Rounds[i].Damages[j].AttackerSteamID == tempDamages[len(tempDamages)-1].AttackerSteamID) &&
-						(currentGame.Rounds[i].Damages[j].VictimSteamID == tempDamages[len(tempDamages)-1].VictimSteamID) &&
-						(currentGame.Rounds[i].Damages[j].Weapon == tempDamages[len(tempDamages)-1].Weapon) {
-						tempDamages[len(tempDamages)-1].HpDamage += currentGame.Rounds[i].Damages[j].HpDamage
-						tempDamages[len(tempDamages)-1].HpDamageTaken += currentGame.Rounds[i].Damages[j].HpDamageTaken
-						tempDamages[len(tempDamages)-1].ArmorDamage += currentGame.Rounds[i].Damages[j].ArmorDamage
-						tempDamages[len(tempDamages)-1].ArmorDamageTaken += currentGame.Rounds[i].Damages[j].ArmorDamageTaken
-					} else {
-						tempDamages = append(tempDamages, currentGame.Rounds[i].Damages[j])
-					}
-					tempDamages = append(tempDamages, currentGame.Rounds[i].Damages[j])
-				}
-			}
-			currentGame.Rounds[i].Damages = tempDamages
-		}
-	}
-
+	
 	// Write the JSON
 	var file []byte
 	var err error
@@ -1209,8 +1207,7 @@ func main() {
 
 	// Parse round starts
 	registerRoundStartHandler(&p, &currentGame, &currentRound,
-		&roundStarted, &roundInFreezetime, &roundInEndTime, &freezeTimeSetFromGameState,
-		, &globalFrameIndex)
+		&roundStarted, &roundInFreezetime, &roundInEndTime, &freezeTimeSetFromGameState, &globalFrameIndex)
 	registerRoundFreezeTimeEndHandler(&p, &currentGame, &currentRound, &convParsed,
 		&RoundRestartDelay, &roundStarted, &roundInFreezetime, &roundInEndTime, &freezeTimeSetFromGameState)
 

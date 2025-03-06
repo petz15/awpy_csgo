@@ -2,7 +2,7 @@ import sys
 import os
 import time
 # from demoparser_V2 import DemoParser
-from demoparser_V3 import DemoParser
+from demoparser import DemoParser
 
 start_time = time.time()
 
@@ -17,8 +17,9 @@ demo_parser = DemoParser(
     demofile = "ence-vs-faze-m1-vertigo.dem", 
     demo_id = "2354989_m1", 
     log=True,
-    parse_frames=False ,
+    parse_frames=True ,
     json_indentation= True,
+    parse_rate=128,
     buy_style="hltv")
 
     
